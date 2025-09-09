@@ -4,6 +4,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 var gZenMarketplaceManager = {
+  _activeTimeouts: new Set(), // Track active timeouts for cleanup
+
   async init() {
     const checkForUpdates = document.getElementById('zenThemeMarketplaceCheckForUpdates');
     const header = document.getElementById('zenMarketplaceHeader');
@@ -57,6 +59,10 @@ var gZenMarketplaceManager = {
     });
 
     window.addEventListener('unload', () => {
+      // Clear any active timeouts to prevent CPU usage after unload
+      this._activeTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+      this._activeTimeouts.clear();
+
       Services.prefs.removeObserver(gZenMods.updatePref, this);
       this.__hasInitializedEvents = false;
 
@@ -177,6 +183,7 @@ var gZenMarketplaceManager = {
       input.addEventListener('change', (event) => {
         if (timeout) {
           clearTimeout(timeout);
+          this._activeTimeouts.delete(timeout); // Remove from tracking set
         }
 
         const file = event.target.files[0];
@@ -186,12 +193,17 @@ var gZenMarketplaceManager = {
       timeout = setTimeout(() => {
         console.warn('[ZenSettings:ZenMods]: Import timeout reached, aborting.');
         resolve(null);
+        this._activeTimeouts.delete(timeout); // Remove from tracking set
       }, 60000);
+      this._activeTimeouts.add(timeout); // Track timeout for cleanup
     });
 
     input.addEventListener('cancel', () => {
       console.warn('[ZenSettings:ZenMods]: Import cancelled by user.');
-      clearTimeout(timeout);
+      if (timeout) {
+        clearTimeout(timeout);
+        this._activeTimeouts.delete(timeout); // Remove from tracking set
+      }
     });
 
     input.click();
@@ -372,10 +384,12 @@ var gZenMarketplaceManager = {
               .removeAttribute('hidden');
           }
         }
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           // We use a timeout to make sure the theme list has been updated before re-enabling the button.
           event.target.removeAttribute('disabled');
+          this._activeTimeouts.delete(timeoutId); // Remove from tracking set
         }, 400);
+        this._activeTimeouts.add(timeoutId); // Track timeout for cleanup
       });
 
       fragment.querySelector('.zenThemeMarketplaceItemTitle').textContent = modName;
