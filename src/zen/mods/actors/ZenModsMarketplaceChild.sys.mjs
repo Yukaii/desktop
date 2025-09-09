@@ -5,6 +5,7 @@
 export class ZenModsMarketplaceChild extends JSWindowActorChild {
   constructor() {
     super();
+    this._activeTimeouts = new Set(); // Track active timeouts for cleanup
   }
 
   handleEvent(event) {
@@ -23,7 +24,22 @@ export class ZenModsMarketplaceChild extends JSWindowActorChild {
         'ZenCheckForModUpdates',
         this.checkForModUpdates.bind(this)
       );
+
+      // Setup cleanup on page unload
+      this.contentWindow.addEventListener(
+        'beforeunload',
+        () => {
+          this._cleanup();
+        },
+        { once: true }
+      );
     }
+  }
+
+  _cleanup() {
+    // Clear any active timeouts to prevent CPU usage after page unload
+    this._activeTimeouts.forEach((timeoutId) => this.contentWindow.clearTimeout(timeoutId));
+    this._activeTimeouts.clear();
   }
 
   // This function will be called from about:preferences
@@ -34,10 +50,12 @@ export class ZenModsMarketplaceChild extends JSWindowActorChild {
   }
 
   initiateModsMarketplace() {
-    this.contentWindow.setTimeout(() => {
+    const timeoutId = this.contentWindow.setTimeout(() => {
       this.addButtons();
       this.injectMarketplaceAPI();
+      this._activeTimeouts.delete(timeoutId); // Remove from tracking set
     }, 0);
+    this._activeTimeouts.add(timeoutId); // Track timeout for cleanup
   }
 
   get actionButton() {

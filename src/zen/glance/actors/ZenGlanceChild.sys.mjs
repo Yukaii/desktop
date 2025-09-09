@@ -8,6 +8,7 @@ export class ZenGlanceChild extends JSWindowActorChild {
     this.mouseUpListener = this.handleMouseUp.bind(this);
     this.mouseDownListener = this.handleMouseDown.bind(this);
     this.clickListener = this.handleClick.bind(this);
+    this._hoverTimeoutId = null; // Track timeout for proper cleanup
   }
 
   async handleEvent(event) {
@@ -83,6 +84,9 @@ export class ZenGlanceChild extends JSWindowActorChild {
       this.hasClicked = false;
     }
     this.mouseIsDown = null;
+
+    // Clear any pending hover timeout when mouse is released
+    this._clearHoverTimeout();
   }
 
   async handleMouseDown(event) {
@@ -90,14 +94,26 @@ export class ZenGlanceChild extends JSWindowActorChild {
     if (!target) {
       return;
     }
+
+    // Clear any existing timeout before setting a new one
+    this._clearHoverTimeout();
+
     this.mouseIsDown = target;
     const hoverActivationDelay = await this.getHoverActivationDelay();
-    this.contentWindow.setTimeout(() => {
+    this._hoverTimeoutId = this.contentWindow.setTimeout(() => {
       if (this.mouseIsDown === target) {
         this.hasClicked = true;
         this.openGlance(target);
       }
+      this._hoverTimeoutId = null; // Reset timeout ID
     }, hoverActivationDelay);
+  }
+
+  _clearHoverTimeout() {
+    if (this._hoverTimeoutId !== null) {
+      this.contentWindow.clearTimeout(this._hoverTimeoutId);
+      this._hoverTimeoutId = null;
+    }
   }
 
   handleClick(event) {

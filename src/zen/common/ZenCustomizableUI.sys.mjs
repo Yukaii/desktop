@@ -3,7 +3,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 export var ZenCustomizableUI = new (class {
-  constructor() {}
+  constructor() {
+    this._observers = new Map(); // Track observers per window for proper cleanup
+  }
 
   TYPE_TOOLBAR = 'toolbar';
   defaultSidebarIcons = ['downloads-button', 'zen-workspaces-button', 'zen-create-new-button'];
@@ -34,6 +36,24 @@ export var ZenCustomizableUI = new (class {
   init(window) {
     this._addSidebarButtons(window);
     this._hideToolbarButtons(window);
+
+    // Setup cleanup when window unloads
+    window.addEventListener(
+      'unload',
+      () => {
+        this._cleanup(window);
+      },
+      { once: true }
+    );
+  }
+
+  _cleanup(window) {
+    // Disconnect any observers associated with this window
+    const observer = this._observers.get(window);
+    if (observer) {
+      observer.disconnect();
+      this._observers.delete(window);
+    }
   }
 
   _addSidebarButtons(window) {
@@ -72,12 +92,18 @@ export var ZenCustomizableUI = new (class {
       </toolbar>
     `);
     toolbox.prepend(sidebarBox);
-    new window.MutationObserver((e) => {
+
+    // Create and store MutationObserver for proper cleanup
+    const observer = new window.MutationObserver((e) => {
       if (e[0].type !== 'attributes' || e[0].attributeName !== 'width') return;
       this._dispatchResizeEvent(window);
-    }).observe(toolbox, {
+    });
+    observer.observe(toolbox, {
       attributes: true, //configure it to listen to attribute changes
     });
+
+    // Store observer for cleanup when window unloads
+    this._observers.set(window, observer);
 
     // remove all styles except for the width, since we are xulstoring the complet style list
     const width = toolbox.style.width || kDefaultSidebarWidth;
